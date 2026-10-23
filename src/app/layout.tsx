@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Archivo, Source_Sans_3, JetBrains_Mono } from "next/font/google";
 import { Nav } from "@/components/Nav";
 import { KillSwitchBanner } from "@/components/KillSwitchBanner";
+import { Toasts } from "@/components/Toasts";
 import "./globals.css";
 
 const display = Archivo({ variable: "--font-display", subsets: ["latin"], weight: ["600", "700", "800"] });
@@ -20,17 +21,24 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <div className="shell">
           <aside className="side">
             <div className="brand">
-              <b>Freshroots</b>
-              <span>Demand Planner</span>
+              <span className="brand-mark" aria-hidden="true">F</span>
+              <div>
+                <b>Freshroots</b>
+                <span>Demand Planner</span>
+              </div>
             </div>
             <Nav />
-            <div className="side-foot">Runs Mon and Thu, 7am IST. Gemini decides, Raghav approves, procurement places the PO in Zoho.</div>
+            <div className="side-foot">
+              <span className="live"><i />Live planning</span>
+              <span>Runs Mon and Thu, 7am IST. Gemini decides, Raghav approves, procurement places the PO.</span>
+            </div>
           </aside>
           <main className="main">
             <KillSwitchBanner />
             {children}
           </main>
         </div>
+        <Toasts />
       </body>
     </html>
   );

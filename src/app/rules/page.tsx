@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from "react";
 import type { Rubric } from "@/lib/rules";
+import { PageHero } from "@/components/PageHero";
+import { toast } from "@/components/Toasts";
+import { PHOTOS } from "@/lib/photos";
 
 const NUM_FIELDS: { key: keyof Rubric; label: string; hint: string }[] = [
   { key: "high_demand_threshold_pct", label: "High demand above (%)", hint: "Last 4 weeks vs 12-week average" },
@@ -37,20 +40,22 @@ export default function RulesPage() {
     const festival_months = months.split(",").map((s) => s.trim()).filter(Boolean).map(Number);
     const res = await fetch("/api/rules", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rubric: { ...r, festival_months } }) });
     const j = await res.json();
-    if (!res.ok) return setMsg({ ok: false, text: j.error });
+    if (!res.ok) {
+      toast(j.error, "err");
+      return setMsg({ ok: false, text: j.error });
+    }
     setR(j.rubric);
     setMsg({ ok: true, text: "Saved. The next run uses these rules." });
+    toast("Rules saved. The next run uses them.");
   }
 
   if (!r) return msg ? <div className="banner red"><p>{msg.text}</p></div> : <p className="muted">Loading…</p>;
 
   return (
     <>
-      <div style={{ display: "grid", gap: 4 }}>
-        <span className="eyebrow">Context · Forecast logic rules (rubric)</span>
-        <h1>Raghav&apos;s rules</h1>
-        <p className="muted">Gemini decides each SKU against these rules. The system also applies them in code and sends any disagreement to Raghav.</p>
-      </div>
+      <PageHero photo={PHOTOS.field} eyebrow="Context · Forecast logic rules (rubric)" title="Raghav's rules">
+        <p>Gemini decides each SKU against these rules. The system also applies them in code and sends any disagreement to Raghav.</p>
+      </PageHero>
 
       <div className="card">
         <div className="grid2">

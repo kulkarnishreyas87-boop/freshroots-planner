@@ -17,6 +17,7 @@ export function Nav() {
     <nav className="nav">
       {LINKS.map((l) => (
         <Link key={l.href} href={l.href} className={path === l.href ? "active" : undefined}>
+          <span className="dot" aria-hidden="true" />
           {l.label}
         </Link>
       ))}

@@ -1,6 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { PageHero } from "@/components/PageHero";
+import { toast } from "@/components/Toasts";
+import { PHOTOS } from "@/lib/photos";
 
 interface Ds { name: string; columns: string[]; rows: number; latest: string | null }
 
@@ -25,11 +28,9 @@ export default function DataPage() {
 
   return (
     <>
-      <div style={{ display: "grid", gap: 4 }}>
-        <span className="eyebrow">Input · Data from SAP and Zoho</span>
-        <h1>Load the exports</h1>
-        <p className="muted">Upload each CSV export before a run. Files must have exactly the columns shown. Sales and inventory are added or updated row by row; open POs replace the old list.</p>
-      </div>
+      <PageHero photo={PHOTOS.boxes} eyebrow="Input · Data from SAP and Zoho" title="Load the exports">
+        <p>Upload each CSV export before a run. Files must have exactly the columns shown. Sales and inventory are added or updated row by row; open POs replace the old list.</p>
+      </PageHero>
       {error && <div className="banner red"><b>Could not read the database.</b><p>{error}</p></div>}
       {sets && <div className="grid2">{sets.map((s) => <UploadCard key={s.name} ds={s} onDone={load} />)}</div>}
     </>
@@ -53,6 +54,7 @@ function UploadCard({ ds, onDone }: { ds: Ds; onDone: () => void }) {
     const json = await res.json();
     setBusy(false);
     setResult(res.ok ? { ok: true, text: `${json.loaded} rows loaded.`, skipped: json.skipped } : { ok: false, text: json.error });
+    toast(res.ok ? `${ds.name}: ${json.loaded} rows loaded${json.skipped?.length ? `, ${json.skipped.length} skipped` : ""}.` : json.error, res.ok ? (json.skipped?.length ? "warn" : "ok") : "err");
     onDone();
   }
 

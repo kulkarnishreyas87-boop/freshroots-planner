@@ -12,7 +12,8 @@ export async function GET() {
 
     // Latest line per SKU from finished runs.
     const skus = await all(
-      `SELECT DISTINCT ON (r.sku_id) r.id, r.sku_id, s.name, s.perishability, r.run_id, ru.latest_week,
+      `SELECT DISTINCT ON (r.sku_id) r.id, r.sku_id, s.name, s.category, s.perishability, r.run_id, ru.latest_week,
+              (r.metrics->>'min_weeks')::float AS min_weeks, (r.metrics->>'max_weeks')::float AS max_weeks,
               coalesce(r.ai_flag, r.rule_flag) AS flag, coalesce(r.ai_action, r.rule_action) AS action,
               r.recommended_qty, r.status, r.final_qty, r.decision_reason, r.po_ref, r.po_placed_at,
               (r.metrics->>'cover_weeks')::float AS cover_weeks

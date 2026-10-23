@@ -16,7 +16,7 @@ export async function GET() {
     if (!run) return NextResponse.json({ run: null, lastAttempt, killSwitch, lines: [] });
 
     const lines = await all(
-      `SELECT r.id, r.sku_id, s.name, s.perishability, s.distributor_id, r.metrics, r.rule_flag, r.rule_action,
+      `SELECT r.id, r.sku_id, s.name, s.category, s.perishability, s.distributor_id, r.metrics, r.rule_flag, r.rule_action,
               r.ai_flag, r.ai_high_demand, r.ai_action, r.ai_reason, r.recommended_qty, r.is_exception, r.exception_reasons,
               r.status, r.final_qty, r.decision_reason, r.decided_at, r.po_ref, r.po_placed_at,
               r.zoho_status, r.zoho_error, r.zoho_reference

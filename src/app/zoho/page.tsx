@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { PageHero } from "@/components/PageHero";
+import { PHOTOS } from "@/lib/photos";
 
 interface ZohoData {
   connection: { ok: boolean; error?: string };
@@ -49,11 +51,9 @@ export default function ZohoPage() {
 
   return (
     <>
-      <div style={{ display: "grid", gap: 4 }}>
-        <span className="eyebrow">Output · PO in Zoho Inventory</span>
-        <h1>Zoho connection</h1>
-        <p className="muted">When Raghav approves an order, the app raises the purchase order in Zoho straight away. Each SKU needs its Zoho item, and each distributor its Zoho vendor.</p>
-      </div>
+      <PageHero photo={PHOTOS.truck} eyebrow="Output · PO in Zoho Inventory" title="Zoho connection">
+        <p>When Raghav approves an order, the app raises the purchase order in Zoho straight away. Each SKU needs its Zoho item, and each distributor its Zoho vendor.</p>
+      </PageHero>
 
       <div className={`banner ${d.connection.ok ? "green" : "red"}`}>
         <b>{d.connection.ok ? "Connected to Zoho Inventory." : "Not connected to Zoho."}</b>
