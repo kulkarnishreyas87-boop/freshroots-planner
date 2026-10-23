@@ -1,0 +1,18 @@
+/node_modules
+/.next/
+/out/
+/build
+.DS_Store
+*.tsbuildinfo
+next-env.d.ts
+.vercel
+npm-debug.log*
+
+# env files
+.env*
+!.env.example
+.deploy-secrets.local
+
+.vercel
+.env*
+!.env.example
