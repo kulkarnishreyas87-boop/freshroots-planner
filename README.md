@@ -15,6 +15,16 @@ Built from the Case 01 components map: Cron → Data from SAP → Data cleaning 
 9. **PO in Zoho** (`src/lib/zoho.ts`, `src/lib/procure.ts`): the moment Raghav approves a line with a quantity, the app raises a purchase order in Zoho Inventory (`POST /purchaseorders`) to the vendor mapped to the SKU's distributor, for the Zoho item with that SKU, at Zoho's purchase rate. The Zoho PO number is saved on the line. Each line is claimed before the call, so a double click can't raise two POs. If Zoho fails, the line shows the error and a Retry button; procurement can also record a PO they raised by hand. POs are created as drafts unless `ZOHO_PO_STATUS=issued`. No PO is raised while the kill switch is on. POs the app raises count as stock on order in later runs until the next Zoho open-PO export is uploaded.
 10. **Kill switch**: trips when more than 30% of at least 10 decisions in 28 days are rejected, or a fresh SKU marked OK is reported out of stock. Runs stay paused until someone resumes with a note.
 
+## Closed loop and safeguards
+
+See [docs/ENGINEERING-PLAN.md](docs/ENGINEERING-PLAN.md) for the full plan. In short:
+
+- **Data gate** (`dataGate` in `src/lib/rules.ts`): stale stock (>10 days), stale sales (>21 days) or >20% SKUs without stock block the run. A single SKU without stock goes to Raghav undecided; Gemini is never asked to guess.
+- **One run at a time** (unique index on running runs), **same-data skip** for cron, **Gemini timeout + retries**, **strict output validation**, and a full **trace** per run (model, prompt version, rules version, input hash, tokens, duration).
+- **Outcome scoring** (`src/lib/learning.ts`): when a newer sales week and stock snapshot arrive, every decided line gets a verdict (right call, missed stockout, short after order, false alarm, missed overstock, ordered when not needed), the demand error, and who was right when Raghav overrode.
+- **Lessons and calibration**: repeated overrides and misses become lessons; consistent bias becomes a rule-change proposal with evidence. Raghav accepts or dismisses each on the **Learning** page. Accepted lessons go into Gemini's context; accepted rule changes create a new rules version.
+- **Eval**: `npm run eval` checks Gemini against golden cases from the case data (live API). **CI** runs typecheck, tests and build on every push.
+
 ## Setup
 
 ```bash

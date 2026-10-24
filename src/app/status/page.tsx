@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ACTION_LABEL, FLAG_CHIP, FLAG_LABEL, fmtIST } from "@/lib/labels";
-import { categoryLook, photoUrl, PHOTOS } from "@/lib/photos";
+import { productLook, photoUrl, PHOTOS } from "@/lib/photos";
 import { PageHero } from "@/components/PageHero";
 import { toast } from "@/components/Toasts";
 import { CountUp, CoverGauge } from "@/components/Viz";
@@ -13,7 +13,7 @@ interface StatusData {
   killLimits: { pct: number; minDecisions: number; days: number };
   lag: { avgDays: number | null; pos: number };
   skus: { id: number; sku_id: string; name: string; category: string; perishability: string; latest_week: string; flag: string; action: string; recommended_qty: number; status: string; final_qty: number | null; po_ref: string | null; po_placed_at: string | null; cover_weeks: number | null; min_weeks: number; max_weeks: number }[];
-  runs: { id: number; trigger: string; status: string; latest_week: string | null; error: string | null; started_at: string }[];
+  runs: { id: number; trigger: string; status: string; latest_week: string | null; error: string | null; started_at: string; prompt_version: string | null; rubric_version: number | null; tokens_in: number | null; tokens_out: number | null; duration_ms: number | null }[];
   stockouts: { id: number; sku_id: string; name: string; note: string | null; reported_at: string }[];
   error?: string;
 }
@@ -54,7 +54,7 @@ export default function StatusPage() {
 
   return (
     <>
-      <PageHero photo={PHOTOS.shelves} eyebrow="Dashboard · Status" title="Where every SKU stands">
+      <PageHero photo={PHOTOS.kirana} eyebrow="Dashboard · Status" title="Where every SKU stands">
         <p>Deepa&apos;s view: flags from the latest run, Raghav&apos;s decisions, POs, and the guardrails.</p>
       </PageHero>
 
@@ -98,7 +98,7 @@ export default function StatusPage() {
             <thead><tr><th>Product</th><th>Flag</th><th>Action</th><th style={{ minWidth: 190 }}>Cover vs window</th><th>Decision</th><th className="n">Qty</th><th>PO</th></tr></thead>
             <tbody>
               {d.skus.map((s) => {
-                const look = categoryLook(s.category);
+                const look = productLook(s.name, s.category);
                 return (
                   <tr key={s.id}>
                     <td>
@@ -146,14 +146,15 @@ export default function StatusPage() {
           <h2>Recent runs</h2>
           <div className="tbl">
             <table>
-              <thead><tr><th>#</th><th>When</th><th>Trigger</th><th>Result</th></tr></thead>
+              <thead><tr><th>#</th><th>When</th><th>Trigger</th><th>Result</th><th>Trace</th></tr></thead>
               <tbody>
                 {d.runs.map((r) => (
                   <tr key={r.id}>
                     <td className="mono">{r.id}</td>
                     <td>{fmtIST(r.started_at)}</td>
                     <td>{r.trigger === "cron" ? "⏰ cron" : "▶ manual"}</td>
-                    <td><span className={`chip ${r.status === "done" ? "c-green" : r.status === "failed" ? "c-red" : "c-amber"}`}>{r.status}</span>{r.error && <div className="small muted">{r.error}</div>}</td>
+                    <td><span className={`chip ${r.status === "done" ? "c-green" : r.status === "failed" || r.status === "blocked_data" ? "c-red" : "c-amber"}`}>{r.status.replace(/_/g, " ")}</span>{r.error && <div className="small muted">{r.error}</div>}</td>
+                    <td className="small muted mono">{[r.rubric_version ? `rules v${r.rubric_version}` : null, r.prompt_version ? `prompt ${r.prompt_version}` : null, r.tokens_in ? `${r.tokens_in + (r.tokens_out ?? 0)} tok` : null, r.duration_ms ? `${(r.duration_ms / 1000).toFixed(1)} s` : null].filter(Boolean).join(" · ") || "—"}</td>
                   </tr>
                 ))}
               </tbody>

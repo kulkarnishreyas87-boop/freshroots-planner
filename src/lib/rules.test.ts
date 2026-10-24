@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseCsv } from "./ingest";
-import { cleanAndCompute, DEFAULT_RUBRIC, shiftWeek, dateToWeek, type CleanInput } from "./rules";
+import { cleanAndCompute, dataGate, DEFAULT_RUBRIC, shiftWeek, dateToWeek, type CleanInput } from "./rules";
 
 const csv = (f: string) => parseCsv(readFileSync(join(__dirname, "../../data", f), "utf8")).slice(1);
 
@@ -61,6 +61,28 @@ test("missing weeks are left out of the average, not counted as zero", () => {
   assert.deepEqual(m.missing_weeks, ["2026-W35"]);
   assert.ok(m.avg_12! > 23 && m.avg_12! < 26);
   assert.ok(m.exceptions.some((e) => e.includes("2026-W35")));
+});
+
+test("data gate: fresh sample data passes; one missing SKU is a warning, not a guess", () => {
+  const input = sampleInput();
+  const inv = input.inventory.filter((i) => i.sku_id !== "SKU009");
+  const g = dataGate({ rubric: DEFAULT_RUBRIC, today: new Date(Date.UTC(2026, 9, 24)), skus: input.skus, latestWeek: "2026-W42", inventory: inv });
+  assert.equal(g.ok, true);
+  assert.deepEqual(g.missingInventory, ["SKU009"]);
+  assert.equal(g.inventoryAgeDays, 5);
+  assert.equal(g.salesAgeDays, 5);
+  assert.match(g.warnings.join(" "), /SKU009/);
+});
+
+test("data gate blocks stale or incomplete data", () => {
+  const input = sampleInput();
+  const stale = dataGate({ rubric: DEFAULT_RUBRIC, today: new Date(Date.UTC(2026, 10, 20)), skus: input.skus, latestWeek: "2026-W42", inventory: input.inventory });
+  assert.equal(stale.ok, false);
+  assert.match(stale.blockers.join(" "), /Inventory is from 2026-10-19/);
+  assert.match(stale.blockers.join(" "), /2026-W42 ended/);
+  const holes = dataGate({ rubric: DEFAULT_RUBRIC, today: new Date(Date.UTC(2026, 9, 24)), skus: input.skus, latestWeek: "2026-W42", inventory: input.inventory.slice(0, 10) });
+  assert.equal(holes.ok, false);
+  assert.match(holes.blockers[0], /5 of 15 SKUs have no inventory row/);
 });
 
 test("open POs count toward cover", () => {

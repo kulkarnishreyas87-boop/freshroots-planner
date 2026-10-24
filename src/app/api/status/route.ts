@@ -30,7 +30,8 @@ export async function GET() {
     );
 
     const runs = await all(
-      `SELECT id, trigger, status, latest_week, error, started_at, finished_at FROM runs ORDER BY id DESC LIMIT 10`
+      `SELECT id, trigger, status, latest_week, error, started_at, finished_at, model, prompt_version, rubric_version, tokens_in, tokens_out, duration_ms
+         FROM runs ORDER BY id DESC LIMIT 10`
     );
     const stockouts = await all(
       `SELECT r.id, r.sku_id, s.name, r.note, r.reported_at FROM stockout_reports r JOIN skus s ON s.sku_id = r.sku_id

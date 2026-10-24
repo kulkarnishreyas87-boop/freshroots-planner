@@ -28,7 +28,13 @@ export interface GeminiDecision {
 export interface GeminiBatchResult {
   decisions: GeminiDecision[];
   summary: string;
+  tokensIn: number;
+  tokensOut: number;
+  problems: string[]; // duplicates or unknown SKUs Gemini returned (ignored)
 }
+
+/** Bump on any change to SYSTEM or the prompt layout; stored on every run. */
+export const PROMPT_VERSION = "2026-10-24.2";
 
 const SCHEMA: Schema = {
   type: Type.OBJECT,
@@ -70,12 +76,13 @@ Otherwise the flag is OK and the action is NO_ACTION.
 How to decide:
 - Use only the numbers provided. Never invent sales, stock, lead times, prices or events.
 - cover_weeks already counts open purchase orders. Quantities are calculated by the system from your action; do not state a quantity of your own.
-- Set needs_raghav=true when the rules do not settle the case: any item in "exceptions", a sudden step-change visible in recent_sales that the averages hide, rising sales on an SKU you are pausing, or anything matching Raghav's judgment notes. Put the reason in raghav_reason (empty string otherwise).
+- Set needs_raghav=true when the rules do not settle the case: any item in "exceptions", a sudden step-change visible in recent_sales that the averages hide, rising sales on an SKU you are pausing, or anything matching Raghav's judgment notes or the approved lessons. Put the reason in raghav_reason (empty string otherwise).
+- Approved lessons come from what actually happened after past decisions and from Raghav's overrides. They never change the thresholds; use them only to decide needs_raghav and to word the reason.
 - reason: one plain sentence for Raghav that cites the numbers behind the decision (for example cover weeks against the window, change_pct against the threshold).
 - Return exactly one decision for every SKU you are given, with the same sku_id.
 - summary: two or three sentences on this run for Raghav: how many SKUs need action and which are most urgent.`;
 
-export async function decideBatch(params: { rubric: Rubric; festival: boolean; latestWeek: string; metrics: SkuMetrics[] }): Promise<GeminiBatchResult> {
+export async function decideBatch(params: { rubric: Rubric; festival: boolean; latestWeek: string; metrics: SkuMetrics[]; lessons?: string[] }): Promise<GeminiBatchResult> {
   const { rubric } = params;
   const skus = params.metrics.map((m) => ({
     sku_id: m.sku_id,
@@ -108,6 +115,9 @@ ${JSON.stringify({
 Raghav's judgment notes:
 ${rubric.judgment_notes.trim() || "(none written yet)"}
 
+Approved lessons from past outcomes and overrides:
+${params.lessons?.length ? params.lessons.map((l, i) => `${i + 1}. ${l}`).join("\n") : "(none yet)"}
+
 Run context: sales up to ${params.latestWeek}. Festival month: ${params.festival ? "yes" : "no"}.
 
 SKUs:
@@ -123,16 +133,48 @@ ${JSON.stringify(skus)}`;
       temperature: 0,
       responseMimeType: "application/json",
       responseSchema: SCHEMA,
+      // 60 s per attempt; the SDK retries 429 and 5xx with exponential backoff.
+      httpOptions: { timeout: 60_000, retryOptions: { attempts: 3, initialDelay: 2, maxDelay: 15 } },
     },
   });
 
   const text = res.text ?? "";
-  let parsed: GeminiBatchResult;
+  let parsed: { decisions?: GeminiDecision[]; summary?: string };
   try {
-    parsed = JSON.parse(text) as GeminiBatchResult;
+    parsed = JSON.parse(text);
   } catch {
     throw new Error(`Gemini did not return valid JSON. First 300 characters: ${text.slice(0, 300)}`);
   }
   if (!Array.isArray(parsed.decisions)) throw new Error("Gemini's reply has no decisions list.");
-  return parsed;
+  const v = validateDecisions(params.metrics.map((m) => m.sku_id), parsed.decisions);
+  return {
+    decisions: v.decisions,
+    problems: v.problems,
+    summary: typeof parsed.summary === "string" ? parsed.summary : "",
+    tokensIn: res.usageMetadata?.promptTokenCount ?? 0,
+    tokensOut: res.usageMetadata?.candidatesTokenCount ?? 0,
+  };
+}
+
+/** Keeps one well-formed decision per requested SKU; reports anything else. Pure. */
+export function validateDecisions(requested: string[], raw: unknown[]): { decisions: GeminiDecision[]; problems: string[] } {
+  const want = new Set(requested);
+  const seen = new Set<string>();
+  const decisions: GeminiDecision[] = [];
+  const problems: string[] = [];
+  for (const d of raw as Partial<GeminiDecision>[]) {
+    const id = typeof d?.sku_id === "string" ? d.sku_id : "";
+    if (!want.has(id)) { problems.push(`Gemini returned an SKU that wasn't asked for: "${id}".`); continue; }
+    if (seen.has(id)) { problems.push(`Gemini returned ${id} twice; kept the first.`); continue; }
+    if (!FLAGS.includes(d.flag as Flag) || !ACTIONS.includes(d.action as Action) || typeof d.reason !== "string") {
+      problems.push(`Gemini's decision for ${id} was malformed; the rule result is used.`);
+      continue;
+    }
+    seen.add(id);
+    decisions.push({
+      sku_id: id, flag: d.flag as Flag, action: d.action as Action, high_demand: !!d.high_demand,
+      needs_raghav: !!d.needs_raghav, raghav_reason: typeof d.raghav_reason === "string" ? d.raghav_reason : "", reason: d.reason,
+    });
+  }
+  return { decisions, problems };
 }

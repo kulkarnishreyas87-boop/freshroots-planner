@@ -1,11 +1,11 @@
 import type { ReactNode } from "react";
 import { photoUrl, type Photo } from "@/lib/photos";
 
-export function PageHero({ photo, eyebrow, title, children, actions }: { photo: Photo; eyebrow: string; title: ReactNode; children?: ReactNode; actions?: ReactNode }) {
+export function PageHero({ photo, eyebrow, title, children, actions, compact }: { photo: Photo; eyebrow: string; title: ReactNode; children?: ReactNode; actions?: ReactNode; compact?: boolean }) {
   return (
-    <section className="hero">
+    <section className={`hero${compact ? " compact" : ""}`}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={photoUrl(photo, 1600, 520)} alt={photo.alt} />
+      <img src={photoUrl(photo, 1600, compact ? 400 : 520)} alt={photo.alt} />
       <div className="hero-body">
         <span className="eyebrow">{eyebrow}</span>
         <h1>{title}</h1>

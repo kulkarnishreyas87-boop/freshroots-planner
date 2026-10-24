@@ -8,7 +8,9 @@
     "start": "next start",
     "seed": "tsx --env-file=.env.local scripts/seed.ts",
     "zoho:token": "tsx --env-file=.env.local scripts/zoho-token.ts",
-    "test": "tsx --test src/lib/*.test.ts"
+    "test": "tsx --test src/lib/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "eval": "tsx --env-file=.env.local scripts/eval.ts"
   },
   "dependencies": {
     "@google/genai": "^2.24.0",

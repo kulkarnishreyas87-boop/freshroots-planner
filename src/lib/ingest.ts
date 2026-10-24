@@ -171,9 +171,16 @@ async function upsert(c: { query: (sql: string, p: unknown[]) => Promise<unknown
         [r[0], r[1], Number(r[2])]
       );
     case "current_inventory":
+      // Keep every snapshot for outcome scoring, then update the latest view.
+      await c.query(
+        `INSERT INTO inventory_history (sku_id, location, units_on_hand, as_of_date) VALUES ($1,$2,$3,$4)
+         ON CONFLICT (sku_id, location, as_of_date) DO UPDATE SET units_on_hand=excluded.units_on_hand`,
+        [r[0], r[1], Number(r[2]), r[3]]
+      );
       return c.query(
         `INSERT INTO inventory (sku_id, location, units_on_hand, as_of_date) VALUES ($1,$2,$3,$4)
-         ON CONFLICT (sku_id, location) DO UPDATE SET units_on_hand=excluded.units_on_hand, as_of_date=excluded.as_of_date`,
+         ON CONFLICT (sku_id, location) DO UPDATE SET units_on_hand=excluded.units_on_hand, as_of_date=excluded.as_of_date
+         WHERE inventory.as_of_date <= excluded.as_of_date`,
         [r[0], r[1], Number(r[2]), r[3]]
       );
     case "open_pos":

@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mergeDecision } from "./pipeline";
+import { validateDecisions } from "./gemini";
 import { DEFAULT_RUBRIC, type SkuMetrics } from "./rules";
 
 const base = {
@@ -30,6 +31,19 @@ test("Gemini repeating a code exception is not listed twice; a new concern is", 
   const fresh = mergeDecision(m, { sku_id: "SKU004", flag: "STOCKOUT_RISK", high_demand: false, action: "REORDER_STANDARD", needs_raghav: true, raghav_reason: "Sales jumped 40% from W39.", reason: "x" }, DEFAULT_RUBRIC);
   assert.equal(fresh.exceptions.length, 2);
   assert.equal(fresh.exceptions[1], "Gemini: Sales jumped 40% from W39.");
+});
+
+test("Gemini output validation: one decision per SKU, junk reported", () => {
+  const ok = { flag: "OK", action: "NO_ACTION", high_demand: false, needs_raghav: false, raghav_reason: "", reason: "fine" };
+  const v = validateDecisions(["SKU001", "SKU002"], [
+    { sku_id: "SKU001", ...ok },
+    { sku_id: "SKU001", ...ok, flag: "STOCKOUT_RISK" },
+    { sku_id: "SKU999", ...ok },
+    { sku_id: "SKU002", ...ok, action: "BUY_EVERYTHING" },
+  ]);
+  assert.deepEqual(v.decisions.map((d) => d.sku_id), ["SKU001"]);
+  assert.equal(v.decisions[0].flag, "OK");
+  assert.equal(v.problems.length, 3);
 });
 
 test("missing Gemini decision falls back to the rule result as an exception", () => {

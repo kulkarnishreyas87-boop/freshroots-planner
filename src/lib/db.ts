@@ -191,6 +191,72 @@ CREATE TABLE IF NOT EXISTS zoho_map (
   PRIMARY KEY (kind, local_id)
 );
 
+-- ---- Closed loop ----------------------------------------------------------
+-- Every inventory snapshot ever uploaded (inventory itself keeps only the latest),
+-- so a decision can be scored against the stock that came after it.
+CREATE TABLE IF NOT EXISTS inventory_history (
+  sku_id TEXT NOT NULL,
+  location TEXT NOT NULL,
+  units_on_hand INTEGER NOT NULL,
+  as_of_date DATE NOT NULL,
+  PRIMARY KEY (sku_id, location, as_of_date)
+);
+INSERT INTO inventory_history (sku_id, location, units_on_hand, as_of_date)
+  SELECT sku_id, location, units_on_hand, as_of_date FROM inventory ON CONFLICT DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS rubric_history (
+  version SERIAL PRIMARY KEY,
+  rules JSONB NOT NULL,
+  note TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Run traceability: what produced these decisions.
+ALTER TABLE runs ADD COLUMN IF NOT EXISTS prompt_version TEXT;
+ALTER TABLE runs ADD COLUMN IF NOT EXISTS rubric_version INTEGER;
+ALTER TABLE runs ADD COLUMN IF NOT EXISTS input_hash TEXT;
+ALTER TABLE runs ADD COLUMN IF NOT EXISTS tokens_in INTEGER;
+ALTER TABLE runs ADD COLUMN IF NOT EXISTS tokens_out INTEGER;
+ALTER TABLE runs ADD COLUMN IF NOT EXISTS duration_ms INTEGER;
+ALTER TABLE runs ADD COLUMN IF NOT EXISTS gate JSONB;
+-- Only one run can be 'running' at a time (safe with Neon's connection pooler).
+CREATE UNIQUE INDEX IF NOT EXISTS runs_one_running ON runs ((true)) WHERE status = 'running';
+
+-- Raghav's feedback on a line.
+ALTER TABLE recommendations ADD COLUMN IF NOT EXISTS reason_tag TEXT;
+ALTER TABLE recommendations ADD COLUMN IF NOT EXISTS useful BOOLEAN;
+
+-- What actually happened after a decision.
+CREATE TABLE IF NOT EXISTS outcomes (
+  recommendation_id INTEGER PRIMARY KEY REFERENCES recommendations(id),
+  scored_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  weeks_observed INTEGER NOT NULL,
+  forecast_weekly_demand DOUBLE PRECISION,
+  actual_weekly_demand DOUBLE PRECISION,
+  demand_error_pct DOUBLE PRECISION,
+  next_as_of DATE,
+  next_on_hand INTEGER,
+  next_cover DOUBLE PRECISION,
+  stock_state TEXT NOT NULL,
+  verdict TEXT NOT NULL,
+  who_was_right TEXT,
+  detail TEXT
+);
+
+-- Lessons and calibration proposals. Nothing changes the system until Raghav accepts.
+CREATE TABLE IF NOT EXISTS lessons (
+  id SERIAL PRIMARY KEY,
+  kind TEXT NOT NULL CHECK (kind IN ('lesson', 'calibration')),
+  status TEXT NOT NULL DEFAULT 'proposed' CHECK (status IN ('proposed', 'accepted', 'dismissed')),
+  source TEXT NOT NULL,
+  dedupe_key TEXT UNIQUE,
+  text TEXT NOT NULL,
+  evidence JSONB,
+  patch JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  decided_at TIMESTAMPTZ
+);
+
 CREATE TABLE IF NOT EXISTS stockout_reports (
   id SERIAL PRIMARY KEY,
   sku_id TEXT NOT NULL,

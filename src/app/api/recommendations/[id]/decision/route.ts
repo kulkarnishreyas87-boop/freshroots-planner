@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { exec, one, logAudit } from "@/lib/db";
 import { evaluateKillSwitch } from "@/lib/pipeline";
 import { raisePo } from "@/lib/procure";
+import { REASON_TAGS } from "@/lib/learning";
 
 export const maxDuration = 60;
 
@@ -11,6 +12,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const body = await req.json().catch(() => ({}));
   const decision = body.decision;
   const reason = typeof body.reason === "string" ? body.reason.trim() : "";
+  const tag = typeof body.reasonTag === "string" && body.reasonTag in REASON_TAGS ? body.reasonTag : null;
 
   if (decision !== "approve" && decision !== "reject") {
     return NextResponse.json({ error: "decision must be approve or reject" }, { status: 400 });
@@ -34,10 +36,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 
   await exec(
-    `UPDATE recommendations SET status = $2, final_qty = $3, decision_reason = $4, decided_at = now() WHERE id = $1`,
-    [line.id, decision === "approve" ? "approved" : "rejected", finalQty, reason || null]
+    `UPDATE recommendations SET status = $2, final_qty = $3, decision_reason = $4, reason_tag = $5, decided_at = now() WHERE id = $1`,
+    [line.id, decision === "approve" ? "approved" : "rejected", finalQty, reason || null, reason ? tag ?? "other" : null]
   );
-  await logAudit("decision", { id: line.id, decision, finalQty, reason });
+  await logAudit("decision", { id: line.id, decision, finalQty, reason, tag });
   const killSwitch = await evaluateKillSwitch();
   // An approved order goes straight to Zoho as a purchase order.
   const po = decision === "approve" && finalQty ? await raisePo(line.id) : null;

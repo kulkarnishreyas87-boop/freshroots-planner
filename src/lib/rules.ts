@@ -20,6 +20,9 @@ export interface Rubric {
   kill_reject_rate_pct: number;
   kill_window_days: number;
   kill_min_decisions: number;
+  gate_max_inventory_age_days: number; // block the run when stock data is older
+  gate_max_sales_age_days: number; // block when the latest sales week ended longer ago
+  gate_max_missing_inventory_pct: number; // block when more SKUs than this have no stock row
 }
 
 export const DEFAULT_RUBRIC: Rubric = {
@@ -38,7 +41,65 @@ export const DEFAULT_RUBRIC: Rubric = {
   kill_reject_rate_pct: 30,
   kill_window_days: 28,
   kill_min_decisions: 10,
+  gate_max_inventory_age_days: 10,
+  gate_max_sales_age_days: 21,
+  gate_max_missing_inventory_pct: 20,
 };
+
+// ---- Data gate ----------------------------------------------------------------
+
+export interface GateResult {
+  ok: boolean;
+  blockers: string[]; // any blocker stops the run before Gemini
+  warnings: string[];
+  missingInventory: string[]; // these SKUs skip Gemini and go to Raghav as data issues
+  inventoryAgeDays: number | null;
+  salesAgeDays: number | null;
+}
+
+const DAY = 86_400_000;
+
+export function dataGate(p: {
+  rubric: Rubric;
+  today: Date;
+  skus: { sku_id: string }[];
+  latestWeek: string | null;
+  inventory: { sku_id: string; as_of_date: string }[];
+}): GateResult {
+  const blockers: string[] = [];
+  const warnings: string[] = [];
+  const r = p.rubric;
+
+  if (p.skus.length === 0) blockers.push("No SKUs loaded. Upload the SKU master.");
+  if (!p.latestWeek) blockers.push("No weekly sales loaded. Upload weekly_sales.");
+
+  let salesAge: number | null = null;
+  if (p.latestWeek) {
+    const weekEnd = weekMonday(p.latestWeek).getTime() + 7 * DAY; // Monday after the week
+    salesAge = Math.floor((p.today.getTime() - weekEnd) / DAY);
+    if (salesAge > r.gate_max_sales_age_days) blockers.push(`Latest sales week ${p.latestWeek} ended ${salesAge} days ago (limit ${r.gate_max_sales_age_days}). Upload newer sales.`);
+  }
+
+  const asOf = p.inventory.map((i) => i.as_of_date).sort().at(-1);
+  let invAge: number | null = null;
+  if (!asOf) blockers.push("No inventory loaded. Upload current_inventory.");
+  else {
+    invAge = Math.floor((p.today.getTime() - Date.parse(`${asOf}T00:00:00Z`)) / DAY);
+    if (invAge > r.gate_max_inventory_age_days) blockers.push(`Inventory is from ${asOf}, ${invAge} days old (limit ${r.gate_max_inventory_age_days}). Upload a fresh snapshot.`);
+    const stale = new Set(p.inventory.filter((i) => i.as_of_date < asOf).map((i) => i.sku_id));
+    if (stale.size) warnings.push(`Older stock rows than ${asOf} for ${[...stale].join(", ")}.`);
+  }
+
+  const have = new Set(p.inventory.map((i) => i.sku_id));
+  const missing = p.skus.map((s) => s.sku_id).filter((id) => !have.has(id));
+  if (p.skus.length && missing.length) {
+    const pct = (missing.length / p.skus.length) * 100;
+    if (pct > r.gate_max_missing_inventory_pct) blockers.push(`${missing.length} of ${p.skus.length} SKUs have no inventory row (${Math.round(pct)}%, limit ${r.gate_max_missing_inventory_pct}%). The export looks incomplete.`);
+    else warnings.push(`No inventory row for ${missing.join(", ")}: sent to Raghav as data issues, not decided by Gemini.`);
+  }
+
+  return { ok: blockers.length === 0, blockers, warnings, missingInventory: missing, inventoryAgeDays: invAge, salesAgeDays: salesAge };
+}
 
 export type Flag = "STOCKOUT_RISK" | "OVERSTOCK_RISK" | "OK";
 export type Action = "REORDER_STANDARD" | "REORDER_1_5X" | "PAUSE_NEXT_ORDER" | "NO_ACTION";
@@ -294,6 +355,7 @@ export function validateRubric(x: unknown): { ok: true; rubric: Rubric } | { ok:
       (out as Record<string, unknown>)[key] = v;
     }
   }
+  if (out.gate_max_inventory_age_days < 1 || out.gate_max_sales_age_days < 7) return { ok: false, error: "Data gate limits are too tight: inventory at least 1 day, sales at least 7 days." };
   if (out.low_perish_min_weeks >= out.low_perish_max_weeks) return { ok: false, error: "Low perishability: minimum weeks must be below maximum." };
   if (out.high_perish_min_weeks >= out.high_perish_max_weeks) return { ok: false, error: "High perishability: minimum weeks must be below maximum." };
   if (!Number.isInteger(out.avg_window_weeks) || !Number.isInteger(out.recent_window_weeks) || out.recent_window_weeks < 1 || out.recent_window_weeks >= out.avg_window_weeks) {

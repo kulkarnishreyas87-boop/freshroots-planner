@@ -20,6 +20,9 @@ const NUM_FIELDS: { key: keyof Rubric; label: string; hint: string }[] = [
   { key: "kill_reject_rate_pct", label: "Kill switch: reject rate above (%)", hint: "" },
   { key: "kill_min_decisions", label: "Kill switch: min decisions", hint: "Before the rate counts" },
   { key: "kill_window_days", label: "Kill switch: window (days)", hint: "" },
+  { key: "gate_max_inventory_age_days", label: "Data gate: max stock age (days)", hint: "Older stock blocks the run" },
+  { key: "gate_max_sales_age_days", label: "Data gate: max sales age (days)", hint: "Since the latest sales week ended" },
+  { key: "gate_max_missing_inventory_pct", label: "Data gate: max SKUs without stock (%)", hint: "Above this the export looks incomplete" },
 ];
 
 export default function RulesPage() {
@@ -53,7 +56,7 @@ export default function RulesPage() {
 
   return (
     <>
-      <PageHero photo={PHOTOS.field} eyebrow="Context · Forecast logic rules (rubric)" title="Raghav's rules">
+      <PageHero photo={PHOTOS.notebook} eyebrow="Context · Forecast logic rules (rubric)" title="Raghav's rules">
         <p>Gemini decides each SKU against these rules. The system also applies them in code and sends any disagreement to Raghav.</p>
       </PageHero>
 
