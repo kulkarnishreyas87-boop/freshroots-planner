@@ -23,7 +23,7 @@ See [docs/ENGINEERING-PLAN.md](docs/ENGINEERING-PLAN.md) for the full plan. In s
 - **One run at a time** (unique index on running runs), **same-data skip** for cron, **Gemini timeout + retries**, **strict output validation**, and a full **trace** per run (model, prompt version, rules version, input hash, tokens, duration).
 - **Outcome scoring** (`src/lib/learning.ts`): when a newer sales week and stock snapshot arrive, every decided line gets a verdict (right call, missed stockout, short after order, false alarm, missed overstock, ordered when not needed), the demand error, and who was right when Raghav overrode.
 - **Lessons and calibration**: repeated overrides and misses become lessons; consistent bias becomes a rule-change proposal with evidence. Raghav accepts or dismisses each on the **Learning** page. Accepted lessons go into Gemini's context; accepted rule changes create a new rules version.
-- **Eval**: `npm run eval` checks Gemini against golden cases from the case data (live API). **CI** runs typecheck, tests and build on every push.
+- **Eval**: `npm run eval` checks Gemini against golden cases from the case data (live API). **CI** (typecheck, tests, build on every push) is ready in `docs/ci-workflow.yml`: to switch it on, create `.github/workflows/ci.yml` on GitHub's website (Add file → Create new file) and paste it in. Pushing workflow files needs a GitHub login with the `workflow` permission.
 
 ## Setup
 
