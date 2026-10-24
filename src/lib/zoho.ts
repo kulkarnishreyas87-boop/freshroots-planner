@@ -31,6 +31,9 @@ export class ZohoError extends Error {
   }
 }
 
+/** Zoho reported success, so a PO probably exists, but we couldn't read its id. Never retry blindly. */
+export class ZohoAcceptedWithoutId extends ZohoError {}
+
 /** Parses Zoho JSON keeping every *_id number (they exceed JS's safe integer range) as a string. */
 function parseZoho(text: string): Record<string, unknown> {
   const safe = text.replace(/"(\w*_id)"\s*:\s*(-?\d{10,})/g, '"$1":"$2"');
@@ -128,8 +131,11 @@ export async function createPurchaseOrder(p: {
     `{"vendor_id":${p.vendorId},"date":${JSON.stringify(p.date)},"reference_number":${JSON.stringify(p.reference)},` +
     `"notes":${JSON.stringify(p.notes)},"line_items":[{"item_id":${p.itemId},"quantity":${p.quantity}${lineRate}}]}`;
   const json = await call("POST", "/purchaseorders", { body });
-  const po = json.purchase_order as { purchaseorder_id?: string; purchaseorder_number?: string; status?: string } | undefined;
-  if (!po?.purchaseorder_id) throw new ZohoError("Zoho accepted the request but returned no purchase order id.");
+  // Zoho's reply nests the PO under "purchaseorder"; some docs show "purchase_order". Accept both.
+  const po = (json.purchaseorder ?? json.purchase_order) as { purchaseorder_id?: string; purchaseorder_number?: string; status?: string } | undefined;
+  if (!po?.purchaseorder_id) {
+    throw new ZohoAcceptedWithoutId(`Zoho said "${String(json.message ?? "success")}" but the reply had no PO id (reply keys: ${Object.keys(json).join(", ")}).`);
+  }
   return { purchaseorder_id: String(po.purchaseorder_id), purchaseorder_number: String(po.purchaseorder_number ?? ""), status: String(po.status ?? "") };
 }
 

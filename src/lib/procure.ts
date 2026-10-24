@@ -1,6 +1,6 @@
 import { all, exec, one, logAudit } from "./db";
 import { getKillSwitch } from "./pipeline";
-import { createPurchaseOrder, findItemBySku, markIssued, zohoConfigured, ZohoError } from "./zoho";
+import { createPurchaseOrder, findItemBySku, markIssued, zohoConfigured, ZohoAcceptedWithoutId, ZohoError } from "./zoho";
 
 /**
  * The PO layer: once Raghav approves a line with a quantity, the PO is raised in Zoho.
@@ -101,6 +101,13 @@ export async function raisePo(lineId: number): Promise<PoOutcome> {
     return { id: line.id, status: "created", message: `PO ${po.purchaseorder_number} raised in Zoho.`, poNumber: po.purchaseorder_number };
   } catch (err) {
     const e = err as Error;
+    if (e instanceof ZohoAcceptedWithoutId) {
+      // Zoho said success: treat the PO as existing. No Retry: a retry would create a duplicate.
+      const msg = `${e.message} Find the draft PO in Zoho with reference ${reference} and record its number here.`;
+      await exec(`UPDATE recommendations SET zoho_status = 'unconfirmed', zoho_error = $2, zoho_reference = $3 WHERE id = $1`, [line.id, msg, reference]);
+      await logAudit("zoho_po_unconfirmed", { id: line.id, msg });
+      return { id: line.id, status: "failed", message: msg };
+    }
     // A timeout may mean Zoho created the PO but the reply was lost.
     const unsure = e.name === "TimeoutError" || e.name === "AbortError" || (e instanceof ZohoError && (e.status ?? 0) >= 500);
     return fail(unsure ? `${e.message}. Zoho may still have created it: search Zoho POs for reference ${reference} before retrying.` : e.message);

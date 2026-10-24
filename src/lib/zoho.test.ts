@@ -1,6 +1,6 @@
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { createPurchaseOrder, findItemBySku, zohoMissing } from "./zoho";
+import { createPurchaseOrder, findItemBySku, zohoMissing, ZohoAcceptedWithoutId } from "./zoho";
 
 type Call = { url: string; method: string; headers: Record<string, string>; body?: string };
 let calls: Call[] = [];
@@ -51,6 +51,21 @@ test("creates a PO: refreshes the token once, keeps 19-digit ids exact, sends id
   await createPurchaseOrder({ vendorId: "1", itemId: "2", quantity: 1, purchaseRate: null, date: "2026-10-22", reference: "r", notes: "" });
   assert.equal(calls.length, 3);
   assert.doesNotMatch(calls[2].body!, /purchase_rate/);
+});
+
+test("reads the PO under 'purchaseorder' (Zoho's key) as well as 'purchase_order'", async () => {
+  replies.push(token, json(201, `{"code":0,"message":"The purchase order has been created.","purchaseorder":{"purchaseorder_id":4285990000000034999,"purchaseorder_number":"PO-00001","status":"draft"}}`));
+  const po = await createPurchaseOrder({ vendorId: "1", itemId: "2", quantity: 1, purchaseRate: null, date: "2026-10-24", reference: "r", notes: "" });
+  assert.equal(po.purchaseorder_id, "4285990000000034999");
+  assert.equal(po.purchaseorder_number, "PO-00001");
+});
+
+test("success without a PO id is flagged as unconfirmed, not a plain failure", async () => {
+  replies.push(token, json(201, `{"code":0,"message":"success","something_else":{}}`));
+  await assert.rejects(
+    createPurchaseOrder({ vendorId: "1", itemId: "2", quantity: 1, purchaseRate: null, date: "2026-10-24", reference: "r", notes: "" }),
+    (e: Error) => e instanceof ZohoAcceptedWithoutId && /reply keys: code, message, something_else/.test(e.message)
+  );
 });
 
 test("Zoho error codes become readable errors", async () => {
